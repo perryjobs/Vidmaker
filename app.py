@@ -1,105 +1,75 @@
 import streamlit as st
-import os
-from moviepy.editor import VideoFileClip, concatenate_videoclips
+from moviepy.editor import ImageClip, concatenate_videoclips, CompositeVideoClip
+from moviepy.video.fx.all import fadein, fadeout, resize
 import tempfile
+import os
 
-def your_processing_function(clip):
+def create_image_sequence_with_transitions(image_files, duration_per_image=2, zoom_scale=1.2, transition_duration=1):
     """
-    Placeholder for your video processing logic.
-    For example, applying filters, overlays, etc.
-    Currently, it returns the original clip.
+    Creates a video from images with zoom and fade transitions.
     """
-    # Example: apply a simple effect (uncomment to activate)
-    # import moviepy.video.fx.all as vfx
-    # return clip.fx(vfx.colorx, 1.2)
-    return clip
-
-def process_video_in_chunks(uploaded_file, chunk_duration=10):
-    """
-    Processes uploaded video in chunks within Streamlit.
-    Returns the path to the final processed video.
-    """
-    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_input:
-        temp_input.write(uploaded_file.read())
-        input_path = temp_input.name
-
-    try:
-        original_clip = VideoFileClip(input_path)
-        total_duration = original_clip.duration
-        st.write(f"Loaded video: {uploaded_file.name}")
-        st.write(f"Total duration: {total_duration:.2f} seconds")
-    except Exception as e:
-        st.error(f"Error loading video: {e}")
-        return None
-
     clips = []
-    temp_files = []
-    start = 0
 
-    # Process in chunks
-    while start < total_duration:
-        end = min(start + chunk_duration, total_duration)
-        try:
-            st.write(f"Processing segment: {start:.2f} to {end:.2f} seconds")
-            # Extract subclip
-            subclip = original_clip.subclip(start, end)
-            # Apply processing
-            processed_subclip = your_processing_function(subclip)
-            # Save to temp file
-            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_clip_file:
-                processed_subclip.write_videofile(
-                    temp_clip_file.name,
-                    codec='libx264',
-                    audio_codec='aac',
-                    verbose=False,
-                    logger=None
-                )
-                temp_files.append(temp_clip_file.name)
-                clips.append(VideoFileClip(temp_clip_file.name))
-        except Exception as e:
-            st.error(f"Error processing segment {start}-{end}: {e}")
-        start += chunk_duration
+    for img_path in image_files:
+        # Create an ImageClip
+        clip = ImageClip(img_path).set_duration(duration_per_image)
 
-    # Concatenate all clips
-    if clips:
-        try:
-            st.write("Concatenating segments...")
-            final_clip = concatenate_videoclips(clips, method="compose")
-            output_path = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
-            final_clip.write_videofile(output_path, codec='libx264', audio_codec='aac', verbose=False, logger=None)
-            st.success("Processing complete!")
-            return output_path
-        except Exception as e:
-            st.error(f"Error concatenating clips: {e}")
-            return None
-        finally:
-            # Cleanup individual segment files
-            for f in temp_files:
-                try:
-                    os.remove(f)
-                except:
-                    pass
-    return None
+        # Apply zoom (scale up slightly)
+        def zoom_effect(get_frame, t):
+            frame = get_frame(t)
+            # Calculate scale factor
+            scale = 1 + (zoom_scale - 1) * (t / duration_per_image)
+            return resize(resize(clip, lambda c: scale))(get_frame=lambda t: frame)
+
+        # Alternatively, use resize fx
+        clip = clip.fx(resize, lambda t: 1 + (zoom_scale - 1) * (t / duration_per_image))
+        # Apply fade in and fade out
+        clip = fadein(clip, transition_duration).fx(fadeout, transition_duration)
+        clips.append(clip)
+
+    # Concatenate all clips with crossfade transitions
+    final = concatenate_videoclips(clips, method="compose")
+    return final
 
 # Streamlit UI
-st.title("Video Processor in Chunks (Streamlit Cloud)")
+st.title("Image to Video with Transitions (Streamlit)")
 
-uploaded_file = st.file_uploader("Upload your video", type=["mp4", "mov", "avi"])
+uploaded_images = st.file_uploader("Upload Images (multiple)", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
 
-if uploaded_file is not None:
-    chunk_size = st.slider("Chunk duration (seconds)", min_value=5, max_value=60, value=10, step=5)
-    process_button = st.button("Process Video")
-    
-    if process_button:
-        with st.spinner("Processing..."):
-            output_video_path = process_video_in_chunks(uploaded_file, chunk_duration=chunk_size)
-            if output_video_path:
-                with open(output_video_path, "rb") as f:
-                    st.download_button(
-                        label="Download Processed Video",
-                        data=f,
-                        file_name="processed_video.mp4",
-                        mime="video/mp4"
-                    )
-                # Optionally, display the video
-                st.video(output_video_path)
+if uploaded_images:
+    duration_per_image = st.slider("Duration per image (seconds)", 1, 5, 2)
+    zoom_scale = st.slider("Zoom scale (e.g., 1.2)", 1.0, 2.0, 1.2, 0.1)
+    transition_duration = st.slider("Transition duration (seconds)", 0.5, 2, 1, 0.1)
+
+    if st.button("Create Video"):
+        with st.spinner("Processing images..."):
+            # Save uploaded images to temp files
+            image_paths = []
+            for uploaded_file in uploaded_images:
+                temp_file = tempfile.NamedTemporaryFile(suffix=os.path.splitext(uploaded_file.name)[1], delete=False)
+                temp_file.write(uploaded_file.read())
+                temp_file.close()
+                image_paths.append(temp_file.name)
+
+            # Generate video
+            final_clip = create_image_sequence_with_transitions(
+                image_paths,
+                duration_per_image=duration_per_image,
+                zoom_scale=zoom_scale,
+                transition_duration=transition_duration
+            )
+
+            # Save to a temporary file
+            output_path = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
+            final_clip.write_videofile(output_path, fps=24, codec='libx264', audio=False, verbose=False, logger=None)
+
+            # Cleanup temp images
+            for img_path in image_paths:
+                os.remove(img_path)
+
+            # Provide download
+            with open(output_path, "rb") as f:
+                st.download_button("Download Video", data=f, file_name="video_with_transitions.mp4", mime="video/mp4")
+
+            # Show video preview
+            st.video(output_path)
