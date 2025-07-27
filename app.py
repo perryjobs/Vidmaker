@@ -1,5 +1,6 @@
 import streamlit as st
 from moviepy.editor import ImageClip, concatenate_videoclips
+import moviepy.video.fx.all as vfx
 import tempfile
 import os
 
@@ -50,16 +51,20 @@ if uploaded_files and len(uploaded_files) == 4:
     for file_path in temp_files:
         clip = ImageClip(file_path).set_duration(clip_duration)
 
-        # Define a function to smoothly zoom in
-        def get_size(t):
+        # Define a frame-wise zoom effect function
+        def zoom_effect(get_frame, t):
+            # Calculate scale based on time
             scale = 1 + (zoom_factor - 1) * (t / clip_duration)
-            original_width, original_height = clip.size
-            new_width = int(original_width * scale)
-            new_height = int(original_height * scale)
-            return (new_width, new_height)
+            # Get current frame
+            frame = get_frame(t)
+            # Determine new size
+            original_width, original_height = frame.shape[1], frame.shape[0]
+            new_size = (int(original_width * scale), int(original_height * scale))
+            # Resize frame
+            return vfx.resize(frame, new_size)
 
-        # Apply resize with the zoom function
-        zoomed_clip = clip.resize(get_size)
+        # Apply the zoom effect
+        zoomed_clip = clip.fl(zoom_effect)
         clips.append(zoomed_clip)
 
     # Concatenate clips with crossfade transitions
