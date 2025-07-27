@@ -51,13 +51,14 @@ if uploaded_files and len(uploaded_files) == 4:
         clip = ImageClip(file_path).set_duration(clip_duration)
 
         # Define zoom function
-        def zoom(t):
-            # t in seconds, normalize to 0-1
-            progress = t / clip_duration
-            return 1 + (zoom_factor - 1) * progress
+        def get_size(t):
+    scale = 1 + (zoom_factor - 1) * (t / clip_duration)
+    original_width, original_height = clip.size
+    new_width = int(original_width * scale)
+    new_height = int(original_height * scale)
+    return (new_width, new_height)
 
-        # Apply zoom-in effect
-        zoomed_clip = clip.resize(lambda t: zoom(t))
+zoomed_clip = clip.resize(get_size)
         clips.append(zoomed_clip)
 
     # Concatenate clips with crossfade transitions
