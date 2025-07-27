@@ -1,8 +1,8 @@
 import streamlit as st
 from moviepy.editor import ImageClip, concatenate_videoclips
-import moviepy.video.fx.all as vfx
 import tempfile
 import os
+import cv2
 
 st.title("Image to Video with Transitions and Zoom Effects")
 
@@ -51,7 +51,7 @@ if uploaded_files and len(uploaded_files) == 4:
     for file_path in temp_files:
         clip = ImageClip(file_path).set_duration(clip_duration)
 
-        # Define a frame-wise zoom effect function
+        # Define a frame-wise zoom effect function using cv2
         def zoom_effect(get_frame, t):
             # Calculate scale based on time
             scale = 1 + (zoom_factor - 1) * (t / clip_duration)
@@ -60,8 +60,9 @@ if uploaded_files and len(uploaded_files) == 4:
             # Determine new size
             original_width, original_height = frame.shape[1], frame.shape[0]
             new_size = (int(original_width * scale), int(original_height * scale))
-            # Resize frame
-            return vfx.resize(frame, new_size)
+            # Resize frame using cv2
+            resized_frame = cv2.resize(frame, new_size, interpolation=cv2.INTER_AREA)
+            return resized_frame
 
         # Apply the zoom effect
         zoomed_clip = clip.fl(zoom_effect)
