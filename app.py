@@ -1,6 +1,6 @@
 import streamlit as st
-from moviepy.editor import ImageClip, concatenate_videoclips, resize
-from moviepy.video.fx.all import fadein, fadeout
+from moviepy.editor import ImageClip, concatenate_videoclips
+from moviepy.video.fx.all import resize, fadein, fadeout
 import tempfile
 import os
 
@@ -15,7 +15,7 @@ def create_image_sequence_with_transitions(image_files, duration_per_image=2, zo
         clip = ImageClip(img_path).set_duration(duration_per_image)
 
         # Apply zoom effect over the duration
-        clip = clip.fx(resize, lambda t: 1 + (zoom_scale - 1) * (t / duration_per_image))
+        clip = resize(clip, lambda t: 1 + (zoom_scale - 1) * (t / duration_per_image))
         # Apply fade in and fade out
         clip = fadein(clip, transition_duration).fx(fadeout, transition_duration)
 
