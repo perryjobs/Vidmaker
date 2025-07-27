@@ -46,26 +46,27 @@ if uploaded_files and len(uploaded_files) == 4:
 
     clips = []
 
-    # Create clips with zoom effect
+    # Process each image with zoom effect
     for file_path in temp_files:
         clip = ImageClip(file_path).set_duration(clip_duration)
 
-        # Define zoom function
+        # Define a function to smoothly zoom in
         def get_size(t):
-    scale = 1 + (zoom_factor - 1) * (t / clip_duration)
-    original_width, original_height = clip.size
-    new_width = int(original_width * scale)
-    new_height = int(original_height * scale)
-    return (new_width, new_height)
+            scale = 1 + (zoom_factor - 1) * (t / clip_duration)
+            original_width, original_height = clip.size
+            new_width = int(original_width * scale)
+            new_height = int(original_height * scale)
+            return (new_width, new_height)
 
-zoomed_clip = clip.resize(get_size)
+        # Apply resize with the zoom function
+        zoomed_clip = clip.resize(get_size)
         clips.append(zoomed_clip)
 
     # Concatenate clips with crossfade transitions
     final_clip = concatenate_videoclips(
         clips,
         method="compose",
-        padding=-transition_duration
+        padding=-transition_duration  # Overlap for transitions
     )
 
     # Save the output video
