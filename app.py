@@ -5,15 +5,37 @@ import os
 
 st.title("Image to Video with Transitions and Zoom Effects")
 
-# Upload images
-uploaded_files = st.file_uploader("Upload 4 Images", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+# Upload images: enforce exactly 4 images
+uploaded_files = st.file_uploader(
+    "Upload 4 Images (jpg, jpeg, png)",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=True
+)
 
-# Ensure 4 images are uploaded
+# Check if 4 images are uploaded
 if uploaded_files and len(uploaded_files) == 4:
-    # Parameters
-    clip_duration = st.slider("Duration of each clip (seconds)", 1, 10, 3)
-    transition_duration = st.slider("Transition duration (seconds)", 0.5, 3, 1)
-    zoom_factor = st.slider("Maximum Zoom Level (e.g., 1.2 means 20% zoom)", 1.0, 2.0, 1.2)
+    # Parameters with explicit steps for float sliders
+    clip_duration = st.slider(
+        "Duration of each clip (seconds)",
+        min_value=1,
+        max_value=10,
+        value=3,
+        step=1
+    )
+    transition_duration = st.slider(
+        "Transition duration (seconds)",
+        min_value=0.5,
+        max_value=3.0,
+        value=1.0,
+        step=0.1
+    )
+    zoom_factor = st.slider(
+        "Maximum Zoom Level (e.g., 1.2 means 20% zoom)",
+        min_value=1.0,
+        max_value=2.0,
+        value=1.2,
+        step=0.1
+    )
 
     # Save uploaded images temporarily
     temp_files = []
@@ -28,10 +50,13 @@ if uploaded_files and len(uploaded_files) == 4:
     for file_path in temp_files:
         clip = ImageClip(file_path).set_duration(clip_duration)
 
-        # Apply zoom-in effect
+        # Define zoom function
         def zoom(t):
-            return 1 + (zoom_factor - 1) * (t / clip_duration)
+            # t in seconds, normalize to 0-1
+            progress = t / clip_duration
+            return 1 + (zoom_factor - 1) * progress
 
+        # Apply zoom-in effect
         zoomed_clip = clip.resize(lambda t: zoom(t))
         clips.append(zoomed_clip)
 
@@ -42,17 +67,18 @@ if uploaded_files and len(uploaded_files) == 4:
         padding=-transition_duration
     )
 
-    # Save the video to a temporary file
+    # Save the output video
     output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
     final_clip.write_videofile(output_path, fps=24)
 
     st.success("Video created successfully!")
 
-    # Display the video
+    # Display the generated video
     st.video(output_path)
 
-    # Clean up temporary files after
+    # Cleanup temporary image files
     for file_path in temp_files:
         os.remove(file_path)
+
 else:
     st.info("Please upload exactly 4 images to proceed.")
