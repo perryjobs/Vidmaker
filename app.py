@@ -1,92 +1,105 @@
 import streamlit as st
-from moviepy.editor import ImageClip, concatenate_videoclips
-import tempfile
 import os
-import cv2
+from moviepy.editor import VideoFileClip, concatenate_videoclips
+import tempfile
 
-st.title("Image to Video with Transitions and Zoom Effects")
+def your_processing_function(clip):
+    """
+    Placeholder for your video processing logic.
+    For example, applying filters, overlays, etc.
+    Currently, it returns the original clip.
+    """
+    # Example: apply a simple effect (uncomment to activate)
+    # import moviepy.video.fx.all as vfx
+    # return clip.fx(vfx.colorx, 1.2)
+    return clip
 
-# Upload images: enforce exactly 4 images
-uploaded_files = st.file_uploader(
-    "Upload 4 Images (jpg, jpeg, png)",
-    type=["jpg", "jpeg", "png"],
-    accept_multiple_files=True
-)
+def process_video_in_chunks(uploaded_file, chunk_duration=10):
+    """
+    Processes uploaded video in chunks within Streamlit.
+    Returns the path to the final processed video.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_input:
+        temp_input.write(uploaded_file.read())
+        input_path = temp_input.name
 
-# Check if 4 images are uploaded
-if uploaded_files and len(uploaded_files) == 4:
-    # Parameters with explicit steps for float sliders
-    clip_duration = st.slider(
-        "Duration of each clip (seconds)",
-        min_value=1,
-        max_value=10,
-        value=3,
-        step=1
-    )
-    transition_duration = st.slider(
-        "Transition duration (seconds)",
-        min_value=0.5,
-        max_value=3.0,
-        value=1.0,
-        step=0.1
-    )
-    zoom_factor = st.slider(
-        "Maximum Zoom Level (e.g., 1.2 means 20% zoom)",
-        min_value=1.0,
-        max_value=2.0,
-        value=1.2,
-        step=0.1
-    )
-
-    # Save uploaded images temporarily
-    temp_files = []
-    for uploaded_file in uploaded_files:
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1])
-        temp_file.write(uploaded_file.read())
-        temp_files.append(temp_file.name)
+    try:
+        original_clip = VideoFileClip(input_path)
+        total_duration = original_clip.duration
+        st.write(f"Loaded video: {uploaded_file.name}")
+        st.write(f"Total duration: {total_duration:.2f} seconds")
+    except Exception as e:
+        st.error(f"Error loading video: {e}")
+        return None
 
     clips = []
+    temp_files = []
+    start = 0
 
-    # Process each image with zoom effect
-    for file_path in temp_files:
-        clip = ImageClip(file_path).set_duration(clip_duration)
+    # Process in chunks
+    while start < total_duration:
+        end = min(start + chunk_duration, total_duration)
+        try:
+            st.write(f"Processing segment: {start:.2f} to {end:.2f} seconds")
+            # Extract subclip
+            subclip = original_clip.subclip(start, end)
+            # Apply processing
+            processed_subclip = your_processing_function(subclip)
+            # Save to temp file
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_clip_file:
+                processed_subclip.write_videofile(
+                    temp_clip_file.name,
+                    codec='libx264',
+                    audio_codec='aac',
+                    verbose=False,
+                    logger=None
+                )
+                temp_files.append(temp_clip_file.name)
+                clips.append(VideoFileClip(temp_clip_file.name))
+        except Exception as e:
+            st.error(f"Error processing segment {start}-{end}: {e}")
+        start += chunk_duration
 
-        # Define a frame-wise zoom effect function using cv2
-        def zoom_effect(get_frame, t):
-            # Calculate scale based on time
-            scale = 1 + (zoom_factor - 1) * (t / clip_duration)
-            # Get current frame
-            frame = get_frame(t)
-            # Determine new size
-            original_width, original_height = frame.shape[1], frame.shape[0]
-            new_size = (int(original_width * scale), int(original_height * scale))
-            # Resize frame using cv2
-            resized_frame = cv2.resize(frame, new_size, interpolation=cv2.INTER_AREA)
-            return resized_frame
+    # Concatenate all clips
+    if clips:
+        try:
+            st.write("Concatenating segments...")
+            final_clip = concatenate_videoclips(clips, method="compose")
+            output_path = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
+            final_clip.write_videofile(output_path, codec='libx264', audio_codec='aac', verbose=False, logger=None)
+            st.success("Processing complete!")
+            return output_path
+        except Exception as e:
+            st.error(f"Error concatenating clips: {e}")
+            return None
+        finally:
+            # Cleanup individual segment files
+            for f in temp_files:
+                try:
+                    os.remove(f)
+                except:
+                    pass
+    return None
 
-        # Apply the zoom effect
-        zoomed_clip = clip.fl(zoom_effect)
-        clips.append(zoomed_clip)
+# Streamlit UI
+st.title("Video Processor in Chunks (Streamlit Cloud)")
 
-    # Concatenate clips with crossfade transitions
-    final_clip = concatenate_videoclips(
-        clips,
-        method="compose",
-        padding=-transition_duration  # Overlap for transitions
-    )
+uploaded_file = st.file_uploader("Upload your video", type=["mp4", "mov", "avi"])
 
-    # Save the output video
-    output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
-    final_clip.write_videofile(output_path, fps=24)
-
-    st.success("Video created successfully!")
-
-    # Display the generated video
-    st.video(output_path)
-
-    # Cleanup temporary image files
-    for file_path in temp_files:
-        os.remove(file_path)
-
-else:
-    st.info("Please upload exactly 4 images to proceed.")
+if uploaded_file is not None:
+    chunk_size = st.slider("Chunk duration (seconds)", min_value=5, max_value=60, value=10, step=5)
+    process_button = st.button("Process Video")
+    
+    if process_button:
+        with st.spinner("Processing..."):
+            output_video_path = process_video_in_chunks(uploaded_file, chunk_duration=chunk_size)
+            if output_video_path:
+                with open(output_video_path, "rb") as f:
+                    st.download_button(
+                        label="Download Processed Video",
+                        data=f,
+                        file_name="processed_video.mp4",
+                        mime="video/mp4"
+                    )
+                # Optionally, display the video
+                st.video(output_video_path)
