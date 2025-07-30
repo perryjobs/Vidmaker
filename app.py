@@ -99,7 +99,6 @@ if uploaded_files:
                 audio=False,
                 verbose=False,
                 logger=None,
-                temp_audiofile_path=None,
                 remove_temp=True,
                 preset='ultrafast',  # Faster encoding
                 ffmpeg_params=['-crf', '28']  # Lower quality but smaller file
